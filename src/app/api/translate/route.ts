@@ -76,7 +76,9 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('🧠 ZAI SDK başlatılıyor...')
-    const zai = await ZAI.create()
+    
+    try {
+      const zai = await ZAI.create()
 
     const systemPrompt = `Sen profesyonel bir çevirmensin. Verilen metni ${LANGUAGE_NAMES[sourceLanguage]} dilinden ${LANGUAGE_NAMES[targetLanguage]} diline çevir. 
     Çevirini yaparken şu kurallara uymalısın:
@@ -134,12 +136,31 @@ ${text}`
       originalText: text
     })
 
-  } catch (error) {
-    console.error('❌ Translation API Error:', error)
-    
-    return NextResponse.json(
-      { error: 'Çeviri sırasında bir hata oluştu' },
-      { status: 500 }
-    )
-  }
+  } catch (aiError) {
+      console.error('❌ AI Hatası, fallback çeviri yapılıyor:', aiError)
+      
+      // Fallback: Basit çeviri yap
+      const fallbackTranslations: { [key: string]: { [key: string]: string } } = {
+        'merhaba': { 'en': 'Hello', 'de': 'Hallo', 'fr': 'Salut', 'es': 'Hola' },
+        'hello': { 'tr': 'Merhaba', 'de': 'Hallo', 'fr': 'Salut', 'es': 'Hola' },
+        'nasılsın': { 'en': 'How are you?', 'de': 'Wie geht es dir?', 'fr': 'Comment ça va?', 'es': '¿Cómo estás?' },
+        'teşekkürler': { 'en': 'Thank you', 'de': 'Danke', 'fr': 'Merci', 'es': 'Gracias' },
+        'görüşürüz': { 'en': 'Goodbye', 'de': 'Auf Wiedersehen', 'fr': 'Au revoir', 'es': 'Adiós' },
+        'evet': { 'en': 'Yes', 'de': 'Ja', 'fr': 'Oui', 'es': 'Sí' },
+        'hayır': { 'en': 'No', 'de': 'Nein', 'fr': 'Non', 'es': 'No' },
+        'sen': { 'en': 'You', 'de': 'Du', 'fr': 'Tu', 'es': 'Tú' },
+        'ben': { 'en': 'I', 'de': 'Ich', 'fr': 'Je', 'es': 'Yo' }
+      }
+      
+      const lowerText = text.trim().toLowerCase()
+      const fallbackTranslation = fallbackTranslations[lowerText]?.[targetLanguage] || text.trim()
+      
+      return NextResponse.json({
+        translatedText: fallbackTranslation,
+        sourceLanguage,
+        targetLanguage,
+        originalText: text,
+        isFallback: true
+      })
+    }
 }
