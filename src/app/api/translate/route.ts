@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import ZAI from 'z-ai-web-dev-sdk'
 
 const LANGUAGE_NAMES: { [key: string]: string } = {
   tr: 'Türkçe',
@@ -30,17 +29,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check for minimum text length and very short texts
-    if (text.trim().length < 2) {
-      console.log('❌ Metin çok kısa')
+    if (sourceLanguage === targetLanguage) {
+      console.log('🔄 Aynı dil, çeviri gerekmiyor')
       return NextResponse.json({
         translatedText: text,
-        message: 'Metin çok kısa, çeviri yapılmadı',
-        needsMoreText: true
+        message: 'Kaynak ve hedef dil aynı'
       })
     }
 
-    // Handle very short words or incomplete texts - don't call AI for very short texts
+    // Handle very short texts - don't call AI
     if (text.trim().length <= 3) {
       console.log('📝 Kısa metin doğrudan çevriliyor:', text)
       
@@ -67,76 +64,76 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    if (sourceLanguage === targetLanguage) {
-      console.log('🔄 Aynı dil, çeviri gerekmiyor')
-      return NextResponse.json({
-        translatedText: text,
-        message: 'Kaynak ve hedef dil aynı'
-      })
-    }
-
-    console.log('🧠 ZAI SDK başlatılıyor...')
-    
+    // For longer texts, try AI first, then fallback
     try {
+      console.log('🧠 AI çeviri deneniyor...')
+      
+      // Try to import and use ZAI SDK
+      let ZAI
+      try {
+        ZAI = await import('z-ai-web-dev-sdk')
+      } catch (importError) {
+        console.log('❌ ZAI SDK import edilemedi, fallback kullanılacak')
+        throw new Error('ZAI SDK not available')
+      }
+
       const zai = await ZAI.create()
 
-    const systemPrompt = `Sen profesyonel bir çevirmensin. Verilen metni ${LANGUAGE_NAMES[sourceLanguage]} dilinden ${LANGUAGE_NAMES[targetLanguage]} diline çevir. 
-    Çevirini yaparken şu kurallara uymalısın:
-    1. Anlamı tam olarak koru
-    2. Doğal ve akıcı bir dil kullan
-    3. Kültürel ifadeleri hedef dile uygun şekilde çevir
-    4. Teknik terimleri doğru çevir
-    5. Cümle yapısını hedef dilin gramer kurallarına uygun şekilde düzenle
-    6. Sadece çeviriyi döndür, açıklama yapma veya başka metin ekleme
-    7. Kısa ve eksik metinler için bile en iyi tahmininde çeviri yap, asla "metin yetersiz" gibi hata verme
-    
-    ÖZEL İNGİLİZCE ÇEVİRİ KURALLARI (eğer İngilizceye çeviri yapıyorsan):
-    - Farklı soruları ayrı cümlelerde yaz: "Who are you?" ve "How are you?" → "Who are you? How are you?"
-    - Negatif cümlelerde "also" yerine cümle sonuna "either" koy: "I also don't know you" → "I don't know you, either."
-    - Selamlaşmaları "Hello," veya "Hi," ile başlat, "I'm" veya "my name is" kullan
-    - Türkçedeki "ama" vurgusu için İngilizcede cümle sonuna "though" ekle: "..., though."
-    - Günlük konuşmada "How are you doing?" daha doğal
-    - Kısa kelimeler için doğrudan çeviri yap: "me" → "me", "sen" → "you"`
+      const systemPrompt = `Sen profesyonel bir çevirmensin. Verilen metni ${LANGUAGE_NAMES[sourceLanguage]} dilinden ${LANGUAGE_NAMES[targetLanguage]} diline çevir. 
+      Çevirini yaparken şu kurallara uymalısın:
+      1. Anlamı tam olarak koru
+      2. Doğal ve akıcı bir dil kullan
+      3. Kültürel ifadeleri hedef dile uygun şekilde çevir
+      4. Teknik terimleri doğru çevir
+      5. Cümle yapısını hedef dilin gramer kurallarına uygun şekilde düzenle
+      6. Sadece çeviriyi döndür, açıklama yapma veya başka metin ekleme
+      
+      ÖZEL İNGİLİZCE ÇEVİRİ KURALLARI (eğer İngilizceye çeviri yapıyorsan):
+      - Farklı soruları ayrı cümlelerde yaz: "Who are you?" ve "How are you?" → "Who are you? How are you?"
+      - Negatif cümlelerde "also" yerine cümle sonuna "either" koy: "I also don't know you" → "I don't know you, either."
+      - Selamlaşmaları "Hello," veya "Hi," ile başlat, "I'm" veya "my name is" kullan
+      - Türkçedeki "ama" vurgusu için İngilizcede cümle sonuna "though" ekle: "..., though."
+      - Günlük konuşmada "How are you doing?" daha doğal
+      - Kısa kelimeler için doğrudan çeviri yap: "me" → "me", "sen" → "you"`
 
-    const userPrompt = `Lütfen aşağıdaki metni ${LANGUAGE_NAMES[sourceLanguage]} dilinden ${LANGUAGE_NAMES[targetLanguage]} diline çevir:
+      const userPrompt = `Lütfen aşağıdaki metni ${LANGUAGE_NAMES[sourceLanguage]} dilinden ${LANGUAGE_NAMES[targetLanguage]} diline çevir:
 
 ${text}`
 
-    console.log('💬 AI prompt gönderiliyor...')
-    const completion = await zai.chat.completions.create({
-      messages: [
-        {
-          role: 'system',
-          content: systemPrompt
-        },
-        {
-          role: 'user',
-          content: userPrompt
-        }
-      ],
-      temperature: 0.3,
-      max_tokens: 1000
-    })
+      console.log('💬 AI prompt gönderiliyor...')
+      const completion = await zai.chat.completions.create({
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt
+          },
+          {
+            role: 'user',
+            content: userPrompt
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 1000
+      })
 
-    console.log('🎯 AI yanıtı alındı:', completion)
+      console.log('🎯 AI yanıtı alındı')
 
-    const translatedText = completion.choices[0]?.message?.content?.trim()
+      const translatedText = completion.choices[0]?.message?.content?.trim()
 
-    if (!translatedText) {
-      console.log('❌ Çeviri sonucu boş')
-      throw new Error('Çeviri sonucu alınamadı')
-    }
+      if (!translatedText) {
+        throw new Error('Çeviri sonucu alınamadı')
+      }
 
-    console.log('✅ Başarılı çeviri:', translatedText)
+      console.log('✅ Başarılı AI çeviri:', translatedText)
 
-    return NextResponse.json({
-      translatedText,
-      sourceLanguage,
-      targetLanguage,
-      originalText: text
-    })
+      return NextResponse.json({
+        translatedText,
+        sourceLanguage,
+        targetLanguage,
+        originalText: text
+      })
 
-  } catch (aiError) {
+    } catch (aiError) {
       console.error('❌ AI Hatası, fallback çeviri yapılıyor:', aiError)
       
       // Fallback: Basit çeviri yap
@@ -146,10 +143,14 @@ ${text}`
         'nasılsın': { 'en': 'How are you?', 'de': 'Wie geht es dir?', 'fr': 'Comment ça va?', 'es': '¿Cómo estás?' },
         'teşekkürler': { 'en': 'Thank you', 'de': 'Danke', 'fr': 'Merci', 'es': 'Gracias' },
         'görüşürüz': { 'en': 'Goodbye', 'de': 'Auf Wiedersehen', 'fr': 'Au revoir', 'es': 'Adiós' },
+        'teşekkür ederim': { 'en': 'Thank you very much', 'de': 'Vielen Dank', 'fr': 'Merci beaucoup', 'es': 'Muchas gracias' },
+        'iyi günler': { 'en': 'Good day', 'de': 'Guten Tag', 'fr': 'Bonne journée', 'es': 'Buen día' },
+        'iyi akşamlar': { 'en': 'Good evening', 'de': 'Guten Abend', 'fr': 'Bonsoir', 'es': 'Buenas tardes' },
         'evet': { 'en': 'Yes', 'de': 'Ja', 'fr': 'Oui', 'es': 'Sí' },
         'hayır': { 'en': 'No', 'de': 'Nein', 'fr': 'Non', 'es': 'No' },
         'sen': { 'en': 'You', 'de': 'Du', 'fr': 'Tu', 'es': 'Tú' },
-        'ben': { 'en': 'I', 'de': 'Ich', 'fr': 'Je', 'es': 'Yo' }
+        'ben': { 'en': 'I', 'de': 'Ich', 'fr': 'Je', 'es': 'Yo' },
+        'bugün': { 'en': 'Today', 'de': 'Heute', 'fr': 'Aujourd\'hui', 'es': 'Hoy' }
       }
       
       const lowerText = text.trim().toLowerCase()
@@ -163,4 +164,13 @@ ${text}`
         isFallback: true
       })
     }
+
+  } catch (error) {
+    console.error('❌ Genel API Hatası:', error)
+    
+    return NextResponse.json(
+      { error: 'Çeviri sırasında bir hata oluştu' },
+      { status: 500 }
+    )
+  }
 }
